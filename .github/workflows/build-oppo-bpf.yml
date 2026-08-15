@@ -1,0 +1,157 @@
+name: Build 9RT - OPPO BPF Backport (verified path)
+
+on:
+  workflow_dispatch:
+
+env:
+  CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+  CCACHE_NOHASHDIR: "true"
+  CCACHE_HARDLINK: "true"
+
+jobs:
+  build:
+    name: 9RT + OPPO BPF 5.10 backport (AK3)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install packages
+        run: |
+          sudo apt update
+          sudo apt install -y git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 squashfs-tools schedtool dpkg-dev make maven libssl-dev pwgen bc libc6-dev-i386 libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler cpio coccinelle zstd p7zip p7zip-full python3
+          curl -C - -L http://launchpadlibrarian.net/580830584/libtinfo5_6.3-2_amd64.deb -o libtinfo5.deb && sudo apt install -y ./libtinfo5.deb && rm -f libtinfo5.deb
+
+      - name: Get build tools
+        run: |
+          cd $GITHUB_WORKSPACE
+          git clone "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9.git" -b "android12L-release" gcc-64 --depth=1
+          git clone "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9.git" -b "android12L-release" gcc-32 --depth=1
+          git clone "https://github.com/prorooter007/android_prebuilts_clang_host_linux-x86_clang-6877366.git" -b "11.0" "clang-custom" --depth 1
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: build-kernel-oppo-bpf
+          max-size: 2G
+
+      - name: Get sources (vendor base + OPPO BPF source + modules)
+        run: |
+          cd $GITHUB_WORKSPACE
+          git clone -b "oneplus/sm8350_b_16.0.0_oneplus9rt" \
+            "https://github.com/JackA1ltman/android_kernel_oneplus_sm8350.git" kernel/msm-5.4 --depth 1
+          git clone -b "oneplus/sm8350_b_16.0.0_oneplus9rt" \
+            "https://github.com/JackA1ltman/android_kernel_modules_and_devicetree_oneplus_sm8350.git" modules --depth 1
+          mv modules/vendor ./ && rm -rf modules
+          git clone -b "oneplus/sm8350v_15.0.0_oneplus9pro" \
+            "https://github.com/JackA1ltman/android_kernel_oppo_sm8350.git" oppo_src --depth 1
+          echo "vendor base: $(grep -E 'SUBLEVEL =' kernel/msm-5.4/Makefile)"
+          echo "oppo bpf source: $(grep -E 'SUBLEVEL =' oppo_src/Makefile)"
+          echo "oppo bpf helpers: $(grep -c 'FN(' oppo_src/include/uapi/linux/bpf.h)"
+
+      - name: Merge OPPO BPF into vendor tree
+        run: |
+          cd $GITHUB_WORKSPACE
+          OP=kernel/msm-5.4
+          OPP=oppo_src
+
+          # Replace kernel/bpf/
+          rm -rf $OP/kernel/bpf
+          cp -r $OPP/kernel/bpf $OP/kernel/bpf
+          echo "[OK] kernel/bpf replaced"
+
+          # Replace BPF-specific headers
+          for h in include/linux/bpf.h include/uapi/linux/bpf.h include/linux/btf.h \
+                   include/uapi/linux/btf.h include/linux/filter.h include/linux/bpf_types.h \
+                   include/linux/tnum.h include/linux/bpf-cgroup.h include/linux/bpf_verifier.h; do
+            cp "$OPP/$h" "$OP/$h" 2>/dev/null && echo "  copied: $h" || echo "  SKIP: $h"
+          done
+
+          # New headers
+          for h in include/linux/bpf_compat54.h include/linux/bpf_lsm.h include/linux/bpf-netns.h \
+                   include/linux/btf_ids.h include/linux/sockptr.h include/linux/rcupdate_trace.h \
+                   include/linux/bpf_local_storage.h; do
+            cp "$OPP/$h" "$OP/$h" 2>/dev/null && echo "  new header: $h" || echo "  SKIP: $h"
+          done
+          mkdir -p $OP/include/net/netns
+          cp $OPP/include/net/netns/bpf.h $OP/include/net/netns/bpf.h 2>/dev/null && echo "  new: net/netns/bpf.h"
+
+          # kernel/trace
+          cp $OPP/kernel/trace/bpf_trace.c $OP/kernel/trace/bpf_trace.c 2>/dev/null && echo "  copied: bpf_trace.c"
+          cp $OPP/kernel/trace/bpf_trace.h $OP/kernel/trace/bpf_trace.h 2>/dev/null && echo "  copied: bpf_trace.h"
+
+          # SM8250-style header patches
+          curl -L "https://raw.githubusercontent.com/one899/oneplus9rt-kernel-pixelos/main/scripts/patch_headers.sh" \
+            -o /tmp/patch_headers.sh
+          bash /tmp/patch_headers.sh "$OP" "$OPP"
+
+          # Clean up
+          rm -rf oppo_src
+          echo "=== 合并后验证 ==="
+          grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL) =' $OP/Makefile
+          echo "vendor BPF helpers: $(grep -c 'FN(' $OP/include/uapi/linux/bpf.h)"
+
+      - name: Get Packing Tools
+        run: |
+          cd $GITHUB_WORKSPACE/kernel/msm-5.4
+          git clone "https://github.com/osm0sis/AnyKernel3.git" -b "master" Anykernel3 --depth=1
+
+      - name: Build Kernel
+        run: |
+          cd $GITHUB_WORKSPACE/kernel/msm-5.4
+          export PATH=$GITHUB_WORKSPACE/clang-custom/bin:$PATH
+          make CC="ccache clang" O=out ARCH=arm64 CLANG_TRIPLE=aarch64-linux-gnu- \
+              BRAND_SHOW_FLAG=oneplus LLVM=1 LLVM_IAS=1 \
+              CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-64/bin/aarch64-linux-android- \
+              CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi- \
+              9rt_defconfig
+          make -j2 CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- \
+              BRAND_SHOW_FLAG=oneplus LLVM=1 LLVM_IAS=1 STRIP=llvm-strip \
+              CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-64/bin/aarch64-linux-android- \
+              CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi- \
+              O=out ARCH=arm64 2>&1 | tee error.log || true
+          echo "=== 收集编译错误 ==="
+          grep -E "error:|fatal error|implicit declaration|No rule to make|undefined reference" error.log | sort -u | head -80 || echo "无错误"
+          echo "=== Image 检查 ==="
+          ls -la out/arch/arm64/boot/Image 2>/dev/null || echo "Image 未生成"
+          test -f out/arch/arm64/boot/Image || exit 1
+          cat out/arch/arm64/boot/dts/vendor/oplus/martini/*.dtb > \
+              out/arch/arm64/boot/dts/vendor/oplus/martini/dtb 2>/dev/null || echo "WARN: dtb concat skipped"
+
+      - name: Make Anykernel3 - NoDTB
+        run: |
+          TIME=$(date +"%Y%m%d%H%M%S")
+          cd $GITHUB_WORKSPACE/kernel/msm-5.4
+          sed -i 's/ExampleKernel by osm0sis @ xda-developers/9RT OPPO-BPF Kernel/g' Anykernel3/anykernel.sh
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' Anykernel3/anykernel.sh
+          sed -i 's!BLOCK=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!BLOCK=auto;!g' Anykernel3/anykernel.sh
+          sed -i 's/IS_SLOT_DEVICE=0;/is_slot_device=auto;/g' Anykernel3/anykernel.sh
+          mkdir -p tmp
+          cp -fp out/arch/arm64/boot/Image tmp
+          cp -rp ./Anykernel3/* tmp
+          cd tmp && 7za a -mx9 tmp.zip * > /dev/null && cd ..
+          cp -fp tmp/tmp.zip oneplus9rt-oppo-bpf-$TIME.zip
+          rm -rf tmp
+          echo "PACK_NAME=oneplus9rt-oppo-bpf-$TIME.zip" >> $GITHUB_ENV
+
+      - name: Make Anykernel3 - DTB
+        run: |
+          TIME=$(date +"%Y%m%d%H%M%S")
+          cd $GITHUB_WORKSPACE/kernel/msm-5.4
+          mkdir -p tmp
+          cp -fp out/arch/arm64/boot/Image tmp
+          if [ -f out/arch/arm64/boot/dts/vendor/oplus/martini/dtb ]; then
+            cp -fp out/arch/arm64/boot/dts/vendor/oplus/martini/dtb tmp
+            cp -fp out/arch/arm64/boot/dts/vendor/oplus/martini/dtbo.img tmp 2>/dev/null || true
+          fi
+          cp -rp ./Anykernel3/* tmp
+          cd tmp && 7za a -mx9 tmp.zip * > /dev/null && cd ..
+          cp -fp tmp/tmp.zip oneplus9rt-oppo-bpf-$TIME-DTB.zip
+          rm -rf tmp
+          echo "PACK_NAME_DTB=oneplus9rt-oppo-bpf-$TIME-DTB.zip" >> $GITHUB_ENV
+
+      - name: Upload Build Artifacts (AK3)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kernel-9RT-OPPO-BPF-AK3
+          path: |
+            kernel/msm-5.4/${{ env.PACK_NAME }}
+            kernel/msm-5.4/${{ env.PACK_NAME_DTB }}
+          if-no-files-found: error
