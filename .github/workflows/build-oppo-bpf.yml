@@ -53,41 +53,19 @@ jobs:
           OPP=oppo_src
 
           # 备份厂商 core.c 的 bpf_get_prog_name(OPPO core.c 没有该函数,但厂商 perf 子系统调用它)
-          python3 - <<'PYEOF'
-          import re
-          with open('kernel/msm-5.4/kernel/bpf/core.c') as f:
-              content = f.read()
-          m = re.search(r'void bpf_get_prog_name\(const struct bpf_prog \*prog, char \*sym\)\n\{.*?\n\}\n', content, re.DOTALL)
-          if m:
-              with open('/tmp/bpf_get_prog_name.c', 'w') as f:
-                  f.write(m.group(0))
-              print('bpf_get_prog_name extracted (%d chars)' % len(m.group(0)))
-          else:
-              print('WARN: bpf_get_prog_name not found in vendor core.c')
-          PYEOF
+          awk '/^void bpf_get_prog_name\(const struct bpf_prog \*prog, char \*sym\)$/{f=1} f{print} f&&/^}$/{exit}' \
+            kernel/msm-5.4/kernel/bpf/core.c > /tmp/bpf_get_prog_name.c
+          echo "extracted bpf_get_prog_name: $(wc -l < /tmp/bpf_get_prog_name.c) lines"
 
           # Replace kernel/bpf/
           rm -rf $OP/kernel/bpf
           cp -r $OPP/kernel/bpf $OP/kernel/bpf
           # 注入厂商的 bpf_get_prog_name(perf 子系统依赖)
-          if [ -f /tmp/bpf_get_prog_name.c ]; then
-            python3 - <<'PYEOF'
-            with open('kernel/msm-5.4/kernel/bpf/core.c') as f:
-                content = f.read()
-            with open('/tmp/bpf_get_prog_name.c') as f:
-                fn = f.read()
-            if 'bpf_get_prog_name' not in content:
-                idx = content.rfind('#endif')
-                if idx == -1:
-                    content = content + '\n' + fn
-                else:
-                    content = content[:idx] + fn + '\n' + content[idx:]
-                with open('kernel/msm-5.4/kernel/bpf/core.c', 'w') as f:
-                    f.write(content)
-                print('bpf_get_prog_name injected')
-            else:
-                print('bpf_get_prog_name already present')
-            PYEOF
+          if [ -s /tmp/bpf_get_prog_name.c ]; then
+            cat /tmp/bpf_get_prog_name.c >> $OP/kernel/bpf/core.c
+            echo "[OK] bpf_get_prog_name appended to core.c"
+          else
+            echo "[WARN] bpf_get_prog_name extract empty, skipping"
           fi
           echo "[OK] kernel/bpf replaced (+bpf_get_prog_name)"
 
