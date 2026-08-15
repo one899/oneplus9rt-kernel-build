@@ -1,0 +1,31 @@
+name: Find bpf_get_uprobe_info declaration
+
+on:
+  workflow_dispatch:
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone vendor + oppo
+        run: |
+          git clone --depth 1 -b oneplus/sm8350_b_16.0.0_oneplus9rt \
+            https://github.com/one899/android_kernel_oneplus_sm8350.git /tmp/vendor
+          git clone --depth 1 -b oneplus/sm8350v_15.0.0_oneplus9pro \
+            https://github.com/JackA1ltman/android_kernel_oppo_sm8350.git /tmp/oppo
+      - name: Grep declarations
+        run: |
+          echo "=== 厂商树 bpf_get_uprobe_info 所有出现 ==="
+          grep -rn "bpf_get_uprobe_info" /tmp/vendor/include/ /tmp/vendor/kernel/trace/ 2>/dev/null | head -10
+          echo ""
+          echo "=== OPPO 树 bpf_get_uprobe_info 所有出现 ==="
+          grep -rn "bpf_get_uprobe_info" /tmp/oppo/include/ /tmp/oppo/kernel/trace/ 2>/dev/null | head -10
+          echo ""
+          echo "=== 厂商树 bpf_get_kprobe_info 所有出现 ==="
+          grep -rn "bpf_get_kprobe_info" /tmp/vendor/include/ /tmp/vendor/kernel/trace/ 2>/dev/null | head -10
+          echo ""
+          echo "=== 厂商 trace_events.h 里 bpf 相关声明 ==="
+          grep -n "bpf_get_" /tmp/vendor/include/linux/trace_events.h 2>/dev/null | head -10
+          echo ""
+          echo "=== OPPO trace_events.h 里 bpf 相关声明 ==="
+          grep -n "bpf_get_" /tmp/oppo/include/linux/trace_events.h 2>/dev/null | head -10
