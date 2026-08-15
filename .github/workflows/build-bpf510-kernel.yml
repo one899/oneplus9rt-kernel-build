@@ -78,6 +78,8 @@ jobs:
                    include/linux/static_call.h include/linux/bpf-cgroup.h include/linux/cgroup-defs.h \
                    include/linux/cgroup.h include/linux/cgroup_api.h \
                    include/linux/kernfs.h include/linux/fs.h include/linux/fsnotify.h \
+                   include/linux/sockptr.h include/linux/bpf_lsm.h include/linux/irq_work.h \
+                   include/linux/sched/mm.h include/linux/sched/task.h include/linux/uidgid.h \
                    security/selinux/include/classmap.h security/selinux/include/initial_sid_to_string.h; do
             if [ -f "$P/$f" ]; then
               mkdir -p "$V/$(dirname $f)"
