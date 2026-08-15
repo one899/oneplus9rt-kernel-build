@@ -76,6 +76,10 @@ jobs:
           # kernel/trace
           cp $OPP/kernel/trace/bpf_trace.c $OP/kernel/trace/bpf_trace.c 2>/dev/null && echo "  copied: bpf_trace.c"
           cp $OPP/kernel/trace/bpf_trace.h $OP/kernel/trace/bpf_trace.h 2>/dev/null && echo "  copied: bpf_trace.h"
+          # net/core/filter.c (5.10 级,配套 filter.h; xsk map helpers)
+          cp $OPP/net/core/filter.c $OP/net/core/filter.c 2>/dev/null && echo "  copied: net/core/filter.c"
+          cp $OPP/include/net/xdp_sock.h $OP/include/net/xdp_sock.h 2>/dev/null && echo "  copied: xdp_sock.h"
+          cp $OPP/include/net/xdp.h $OP/include/net/xdp.h 2>/dev/null && echo "  copied: xdp.h"
           # bpf_trace.c 配套的 uprobe/kprobe 信息获取(签名差异:5 参 vs 厂商 6 参)
           cp $OPP/kernel/trace/trace_uprobe.c $OP/kernel/trace/trace_uprobe.c 2>/dev/null && echo "  copied: trace_uprobe.c"
           cp $OPP/kernel/trace/trace_kprobe.c $OP/kernel/trace/trace_kprobe.c 2>/dev/null && echo "  copied: trace_kprobe.c"
