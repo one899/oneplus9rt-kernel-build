@@ -1,0 +1,23 @@
+name: Find bpf_get_prog_name caller in vendor
+
+on:
+  workflow_dispatch:
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone vendor
+        run: |
+          git clone --depth 1 -b oneplus/sm8350_b_16.0.0_oneplus9rt \
+            https://github.com/one899/android_kernel_oneplus_sm8350.git /tmp/vendor
+      - name: Grep caller
+        run: |
+          echo "=== 厂商树全树 bpf_get_prog_name ==="
+          grep -rn "bpf_get_prog_name" /tmp/vendor --include="*.c" --include="*.h" | head -10
+          echo ""
+          echo "=== 厂商树 ns_match ==="
+          grep -rn "ns_match" /tmp/vendor --include="*.c" | head -5
+          echo ""
+          echo "=== 厂商树 bpf_prog_test_run_raw_tp/tracing 定义 ==="
+          grep -rln "bpf_prog_test_run_raw_tp\|bpf_prog_test_run_tracing" /tmp/vendor/net/ /tmp/vendor/kernel/ 2>/dev/null | head -5
