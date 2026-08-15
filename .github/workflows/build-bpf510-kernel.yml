@@ -88,6 +88,7 @@ jobs:
                    include/linux/lsm_hook_defs.h include/linux/vmalloc.h include/linux/slab.h \
                    include/linux/rcupdate_trace.h include/linux/rcupdate.h include/linux/rcu_sync.h \
                    include/uapi/linux/audit.h \
+                   include/linux/netdevice.h \
                    net/core/dev.c kernel/rcu/tasks.h kernel/rcu/Makefile kernel/rcu/update.c \
                    security/selinux/include/classmap.h security/selinux/include/initial_sid_to_string.h; do
             if [ -f "$P/$f" ]; then
@@ -121,7 +122,7 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/kernel/msm-5.4
           # 确保 BPF 子系统配置开启
-          for opt in CONFIG_BPF CONFIG_BPF_SYSCALL CONFIG_BPF_JIT CONFIG_HAVE_EBPF_JIT CONFIG_BPF_EVENTS CONFIG_BPF_TRACING CONFIG_BPF_LSM CONFIG_DEBUG_INFO_BTF; do
+          for opt in CONFIG_BPF CONFIG_BPF_SYSCALL CONFIG_BPF_JIT CONFIG_HAVE_EBPF_JIT CONFIG_BPF_EVENTS CONFIG_BPF_TRACING CONFIG_BPF_LSM CONFIG_DEBUG_INFO_BTF CONFIG_TASKS_RCU CONFIG_TASKS_TRACE_RCU; do
             grep -q "^$opt=" arch/arm64/configs/9rt_defconfig || echo "$opt=y" >> arch/arm64/configs/9rt_defconfig
             echo "checked: $opt"
           done
