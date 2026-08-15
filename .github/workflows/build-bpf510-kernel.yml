@@ -76,6 +76,7 @@ jobs:
                    include/linux/perf_event.h include/linux/ftrace.h include/linux/trace_events.h \
                    include/linux/security.h include/linux/lsm_hooks.h \
                    include/linux/static_call.h include/linux/bpf-cgroup.h include/linux/cgroup-defs.h \
+                   include/linux/cgroup.h include/linux/cgroup_api.h \
                    security/selinux/include/classmap.h security/selinux/include/initial_sid_to_string.h; do
             if [ -f "$P/$f" ]; then
               mkdir -p "$V/$(dirname $f)"
