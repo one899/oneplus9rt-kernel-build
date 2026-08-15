@@ -1,0 +1,36 @@
+name: Grep bpf_xdp_link_attach location
+
+on:
+  workflow_dispatch:
+
+jobs:
+  grep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone PixelOS (shallow)
+        run: |
+          git clone --depth 1 -b sixteen-qpr2 \
+            https://github.com/one899/android_kernel_oneplus_sm8350_pixelos.git /tmp/pixelos
+      - name: Clone vendor (shallow)
+        run: |
+          git clone --depth 1 -b oneplus/sm8350_b_16.0.0_oneplus9rt \
+            https://github.com/JackA1ltman/android_kernel_oneplus_sm8350.git /tmp/vendor
+      - name: Grep locations
+        run: |
+          echo "=== PixelOS: bpf_xdp_link_attach 声明位置(头文件) ==="
+          grep -rn "bpf_xdp_link_attach" /tmp/pixelos/include/ | head -10
+          echo ""
+          echo "=== PixelOS: bpf_xdp_link_attach 定义位置(.c) ==="
+          grep -rn "bpf_xdp_link_attach" /tmp/pixelos/net/ /tmp/pixelos/kernel/ | head -10
+          echo ""
+          echo "=== PixelOS: CONFIG_TASKS_TRACE_RCU 在 defconfig ==="
+          grep -rn "CONFIG_TASKS_TRACE_RCU\|CONFIG_TASKS_RCU" /tmp/pixelos/arch/arm64/configs/ 2>/dev/null | head -5
+          echo ""
+          echo "=== PixelOS: xdp_link 在 syscall.c include 链 ==="
+          grep -rn "bpf_xdp_link_attach" /tmp/pixelos/include/linux/bpf.h /tmp/pixelos/include/net/xdp.h /tmp/pixelos/include/linux/filter.h 2>/dev/null
+          echo ""
+          echo "=== 厂商: bpf_xdp_link_attach 位置 ==="
+          grep -rn "bpf_xdp_link_attach" /tmp/vendor/include/ /tmp/vendor/net/core/dev.c 2>/dev/null | head -5
+          echo ""
+          echo "=== PixelOS net/core/dev.c 中 bpf_xdp_link_attach 上下文 ==="
+          grep -n -B5 "int bpf_xdp_link_attach" /tmp/pixelos/net/core/dev.c | head -20
