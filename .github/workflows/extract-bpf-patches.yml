@@ -1,0 +1,98 @@
+name: Extract BPF Backport Patches from PixelOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone vendor kernel (full history for base)
+        run: |
+          git clone -b oneplus/sm8350_b_16.0.0_oneplus9rt \
+            https://github.com/one899/android_kernel_oneplus_sm8350.git vendor
+      - name: Clone PixelOS reference (full history)
+        run: |
+          git clone -b sixteen-qpr2 \
+            https://github.com/one899/android_kernel_oneplus_sm8350_pixelos.git pixelos
+      - name: Generate per-file diffs for BPF subsystem
+        run: |
+          mkdir -p patches
+          # 铁律范围:只提取 BPF 核心文件,不碰厂商驱动
+          FILES="
+          kernel/bpf/arraymap.c
+          kernel/bpf/btf.c
+          kernel/bpf/cgroup.c
+          kernel/bpf/core.c
+          kernel/bpf/cpumap.c
+          kernel/bpf/devmap.c
+          kernel/bpf/hashtab.c
+          kernel/bpf/helpers.c
+          kernel/bpf/inode.c
+          kernel/bpf/local_storage.c
+          kernel/bpf/lpm_trie.c
+          kernel/bpf/map_in_map.c
+          kernel/bpf/map_in_map.h
+          kernel/bpf/offload.c
+          kernel/bpf/percpu_freelist.c
+          kernel/bpf/percpu_freelist.h
+          kernel/bpf/queue_stack_maps.c
+          kernel/bpf/reuseport_array.c
+          kernel/bpf/stackmap.c
+          kernel/bpf/syscall.c
+          kernel/bpf/tnum.c
+          kernel/bpf/verifier.c
+          kernel/bpf/Makefile
+          kernel/bpf/ringbuf.c
+          kernel/bpf/bpf_iter.c
+          kernel/bpf/map_iter.c
+          kernel/bpf/prog_iter.c
+          kernel/bpf/task_iter.c
+          kernel/bpf/trampoline.c
+          kernel/bpf/dispatcher.c
+          kernel/bpf/bpf_lsm.c
+          kernel/bpf/bpf_struct_ops.c
+          kernel/bpf/bpf_struct_ops_types.h
+          kernel/bpf/bpf_inode_storage.c
+          kernel/bpf/bpf_local_storage.c
+          kernel/bpf/net_namespace.c
+          kernel/trace/bpf_trace.c
+          net/core/filter.c
+          include/linux/bpf.h
+          include/linux/bpf_verifier.h
+          include/linux/bpf_types.h
+          include/linux/bpf_local_storage.h
+          include/linux/bpf_lsm.h
+          include/linux/bpf_ringbuf.h
+          include/linux/bpf_trace.h
+          include/linux/btf.h
+          include/linux/filter.h
+          include/uapi/linux/bpf.h
+          include/uapi/linux/btf.h
+          "
+          for f in $FILES; do
+            if [ -f "pixelos/$f" ]; then
+              if [ -f "vendor/$f" ]; then
+                if ! diff -q "vendor/$f" "pixelos/$f" > /dev/null 2>&1; then
+                  echo "=== DIFF: $f ==="
+                  # generate unified diff with a/ b/ prefixes for git apply
+                  diff -u "vendor/$f" "pixelos/$f" | sed "s|vendor/$f|a/$f|; s|pixelos/$f|b/$f|" > "patches/$(echo $f | tr '/' '_').patch"
+                  wc -l "patches/$(echo $f | tr '/' '_').patch"
+                fi
+              else
+                echo "=== NEW FILE: $f ==="
+                mkdir -p "patches/new/$(dirname $f)"
+                cp "pixelos/$f" "patches/new/$f"
+              fi
+            fi
+          done
+          echo "=== Summary ==="
+          ls -la patches/ | head -50
+          echo "Total patch files: $(ls patches/*.patch 2>/dev/null | wc -l)"
+          echo "Total new files: $(find patches/new -type f 2>/dev/null | wc -l)"
+          echo "Total diff lines: $(cat patches/*.patch 2>/dev/null | wc -l)"
+      - name: Upload patches
+        uses: actions/upload-artifact@v4
+        with:
+          name: bpf-backport-patches
+          path: patches/
