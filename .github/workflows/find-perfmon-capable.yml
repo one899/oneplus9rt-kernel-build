@@ -1,0 +1,33 @@
+name: Find perfmon_capable in PixelOS + vendor trees
+
+on:
+  workflow_dispatch:
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone PixelOS reference
+        run: |
+          git clone --depth 1 -b sixteen-qpr2 \
+            https://github.com/one899/android_kernel_oneplus_sm8350_pixelos.git /tmp/pixelos
+      - name: Clone vendor kernel
+        run: |
+          git clone --depth 1 -b oneplus/sm8350_b_16.0.0_oneplus9rt \
+            https://github.com/JackA1ltman/android_kernel_oneplus_sm8350.git /tmp/vendor
+      - name: Grep perfmon_capable everywhere
+        run: |
+          echo "=== PixelOS: perfmon_capable 定义与使用 ==="
+          grep -rn "perfmon_capable" /tmp/pixelos --include="*.c" --include="*.h" | head -30
+          echo ""
+          echo "=== Vendor: perfmon_capable 定义与使用 ==="
+          grep -rn "perfmon_capable" /tmp/vendor --include="*.c" --include="*.h" | head -30
+          echo ""
+          echo "=== PixelOS include/linux/perf_event.h 中相关声明 ==="
+          grep -n "capable\|perfmon" /tmp/pixelos/include/linux/perf_event.h | head -20
+          echo ""
+          echo "=== Vendor include/linux/perf_event.h 中相关声明 ==="
+          grep -n "capable\|perfmon" /tmp/vendor/include/linux/perf_event.h | head -20
+          echo ""
+          echo "=== 对比 include/linux/perf_event.h 差异行数 ==="
+          diff /tmp/vendor/include/linux/perf_event.h /tmp/pixelos/include/linux/perf_event.h | wc -l
