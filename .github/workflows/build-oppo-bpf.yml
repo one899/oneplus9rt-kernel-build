@@ -80,6 +80,11 @@ jobs:
           cp $OPP/net/core/filter.c $OP/net/core/filter.c 2>/dev/null && echo "  copied: net/core/filter.c"
           cp $OPP/include/net/xdp_sock.h $OP/include/net/xdp_sock.h 2>/dev/null && echo "  copied: xdp_sock.h"
           cp $OPP/include/net/xdp.h $OP/include/net/xdp.h 2>/dev/null && echo "  copied: xdp.h"
+          # net/core bpf 配套文件(5.10 级 map API)
+          for f in bpf_sk_storage.c lwt_bpf.c skmsg.c sock_map.c sock_reuseport.c xdp.c; do
+            cp "$OPP/net/core/$f" "$OP/net/core/$f" 2>/dev/null && echo "  copied: net/core/$f" || echo "  SKIP: net/core/$f"
+          done
+          cp $OPP/include/linux/skmsg.h $OP/include/linux/skmsg.h 2>/dev/null && echo "  copied: skmsg.h"
           # bpf_trace.c 配套的 uprobe/kprobe 信息获取(签名差异:5 参 vs 厂商 6 参)
           cp $OPP/kernel/trace/trace_uprobe.c $OP/kernel/trace/trace_uprobe.c 2>/dev/null && echo "  copied: trace_uprobe.c"
           cp $OPP/kernel/trace/trace_kprobe.c $OP/kernel/trace/trace_kprobe.c 2>/dev/null && echo "  copied: trace_kprobe.c"
