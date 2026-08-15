@@ -71,11 +71,17 @@ jobs:
                    include/linux/bpf.h include/linux/bpf_verifier.h include/linux/bpf_types.h \
                    include/linux/bpf_local_storage.h include/linux/bpf_lsm.h include/linux/bpf_ringbuf.h \
                    include/linux/bpf_trace.h include/linux/btf.h include/linux/filter.h \
-                   include/uapi/linux/bpf.h include/uapi/linux/btf.h; do
+                   include/uapi/linux/bpf.h include/uapi/linux/btf.h \
+                   include/linux/capability.h include/uapi/linux/capability.h \
+                   include/linux/perf_event.h include/linux/ftrace.h include/linux/trace_events.h \
+                   include/linux/security.h include/linux/lsm_hooks.h \
+                   include/linux/static_call.h include/linux/bpf-cgroup.h include/linux/cgroup-defs.h; do
             if [ -f "$P/$f" ]; then
               mkdir -p "$V/$(dirname $f)"
               cp "$P/$f" "$V/$f"
               echo "synced: $f"
+            else
+              echo "SKIP (not in pixelos): $f"
             fi
           done
 
