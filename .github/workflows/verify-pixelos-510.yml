@@ -1,0 +1,65 @@
+name: Verify PixelOS BPF vs Upstream 5.10
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone PixelOS reference (shallow)
+        run: |
+          git clone --depth 1 -b sixteen-qpr2 \
+            https://github.com/one899/android_kernel_oneplus_sm8350_pixelos.git pixelos
+      - name: Fetch upstream 5.10 kernel (shallow, bpf files only)
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse \
+            -b v5.10 https://github.com/torvalds/linux.git upstream510
+          cd upstream510
+          git sparse-checkout set kernel/bpf include/linux include/uapi/linux net/core/filter.c kernel/trace
+          ls kernel/bpf/ | head -30
+      - name: Compare PixelOS BPF vs upstream 5.10
+        run: |
+          mkdir -p report
+          echo "# PixelOS BPF vs Upstream Linux v5.10" > report/verify.md
+          echo "" >> report/verify.md
+
+          echo "## Kernel version marker" >> report/verify.md
+          echo "- PixelOS Makefile VERSION: $(grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION)' pixelos/Makefile | tr '\n' ' ')" >> report/verify.md
+
+          echo "" >> report/verify.md
+          echo "## 1. Files in PixelOS kernel/bpf vs upstream 5.10" >> report/verify.md
+          echo "### In PixelOS but NOT in upstream 5.10 (PixelOS-specific/backported additions):" >> report/verify.md
+          diff -rq pixelos/kernel/bpf upstream510/kernel/bpf 2>/dev/null | grep -E "Only in pixelos" | sed 's/^/  /' >> report/verify.md || echo "  none" >> report/verify.md
+          echo "" >> report/verify.md
+          echo "### In upstream 5.10 but NOT in PixelOS (missing):" >> report/verify.md
+          diff -rq pixelos/kernel/bpf upstream510/kernel/bpf 2>/dev/null | grep -E "Only in upstream510" | sed 's/^/  /' >> report/verify.md || echo "  none" >> report/verify.md
+
+          echo "" >> report/verify.md
+          echo "## 2. Files that differ (content-level)" >> report/verify.md
+          for f in $(cd upstream510/kernel/bpf && ls *.c *.h 2>/dev/null); do
+            if [ -f "pixelos/kernel/bpf/$f" ] && [ -f "upstream510/kernel/bpf/$f" ]; then
+              L=$(diff "pixelos/kernel/bpf/$f" "upstream510/kernel/bpf/$f" 2>/dev/null | wc -l)
+              echo "- $f : $L diff lines" >> report/verify.md
+            fi
+          done
+
+          echo "" >> report/verify.md
+          echo "## 3. Helper count comparison" >> report/verify.md
+          echo "- PixelOS: $(grep -oP 'FN\(\K[a-z_0-9]+' pixelos/include/uapi/linux/bpf.h | wc -l)" >> report/verify.md
+          echo "- Upstream 5.10: $(grep -oP 'FN\(\K[a-z_0-9]+' upstream510/include/uapi/linux/bpf.h | wc -l)" >> report/verify.md
+
+          echo "" >> report/verify.md
+          echo "## 4. Key 5.10 BPF features in PixelOS" >> report/verify.md
+          for feat in BPF_MAP_TYPE_RINGBUF BPF_MAP_TYPE_STRUCT_OPS BPF_PROG_TYPE_LSM BPF_PROG_TYPE_STRUCT_OPS BPF_LINK_TYPE_ITER BPF_LINK_TYPE_TRACING BPF_PROG_TYPE_EXT BPF_PROG_TYPE_SK_LOOKUP BPF_MAP_TYPE_TASK_STORAGE BPF_MAP_TYPE_INODE_STORAGE BPF_MAP_TYPE_BLOOM_FILTER; do
+            p=$(grep -c "$feat" pixelos/include/uapi/linux/bpf.h 2>/dev/null || echo 0)
+            u=$(grep -c "$feat" upstream510/include/uapi/linux/bpf.h 2>/dev/null || echo 0)
+            echo "- $feat: PixelOS=$p 5.10=$u" >> report/verify.md
+          done
+
+          cat report/verify.md
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-510-report
+          path: report/
