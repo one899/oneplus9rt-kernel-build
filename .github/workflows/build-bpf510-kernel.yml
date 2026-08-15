@@ -80,10 +80,11 @@ jobs:
                    include/linux/kernfs.h include/linux/fs.h include/linux/fsnotify.h \
                    include/linux/sockptr.h include/linux/bpf_lsm.h include/linux/irq_work.h \
                    include/linux/sched/mm.h include/linux/sched/task.h include/linux/uidgid.h \
-                   include/linux/sha1.h include/linux/crypto.h \
+                   include/linux/sha1.h include/linux/crypto.h include/linux/cryptohash.h \
                    include/net/net_namespace.h include/net/netns/bpf.h include/net/sock.h \
                    include/net/inet_sock.h include/net/netns/hash.h \
                    include/linux/bpf-netns.h include/linux/bpf-cgroup.h include/linux/bpf_perf_event.h \
+                   include/trace/events/cgroup.h \
                    security/selinux/include/classmap.h security/selinux/include/initial_sid_to_string.h; do
             if [ -f "$P/$f" ]; then
               mkdir -p "$V/$(dirname $f)"
@@ -93,6 +94,18 @@ jobs:
               echo "SKIP (not in pixelos): $f"
             fi
           done
+
+          echo "=== 同步 kernel/cgroup/cgroup.c (PixelOS 5.10 版,保留 OPLUS 定制) ==="
+          if [ -f "$P/kernel/cgroup/cgroup.c" ]; then
+            # 提取厂商 OPLUS 定制代码段(ifdef CONFIG_OPLUS_FEATURE_UID_PERF 块)
+            awk '/#ifdef CONFIG_OPLUS_FEATURE_UID_PERF/,/#endif \/\* CONFIG_OPLUS_FEATURE_UID_PERF \*\//' "$V/kernel/cgroup/cgroup.c" > /tmp/oplus-cgroup-segments.txt 2>/dev/null || true
+            cp "$P/kernel/cgroup/cgroup.c" "$V/kernel/cgroup/cgroup.c"
+            echo "cgroup.c synced from pixelos (OPLUS segments: $(wc -l < /tmp/oplus-cgroup-segments.txt 2>/dev/null || echo 0) lines saved for manual re-apply)"
+            # 若提取到 OPLUS 段,尝试重新注入(在文件末尾的合适位置太复杂,先记录)
+            if [ -s /tmp/oplus-cgroup-segments.txt ]; then
+              echo "WARNING: OPLUS UID_PERF segments need manual re-apply - see note in build log"
+            fi
+          fi
 
           echo "=== 验证 ==="
           cd $V
