@@ -1,0 +1,128 @@
+name: Build 9RT - PixelOS Base + OPLUS vendor (BPF 5.10)
+
+on:
+  workflow_dispatch:
+
+env:
+  CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+  CCACHE_NOHASHDIR: "true"
+  CCACHE_HARDLINK: "true"
+
+jobs:
+  build:
+    name: 9RT ColorOS16 - PixelOS base + OPLUS configs (AK3)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install packages
+        run: |
+          sudo apt update
+          sudo apt install -y git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 squashfs-tools schedtool dpkg-dev make maven libssl-dev pwgen bc libc6-dev-i386 libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler cpio coccinelle zstd p7zip p7zip-full python3
+          curl -C - -L http://launchpadlibrarian.net/580830584/libtinfo5_6.3-2_amd64.deb -o libtinfo5.deb && sudo apt install -y ./libtinfo5.deb && rm -f libtinfo5.deb
+
+      - name: Get build tools
+        run: |
+          cd $GITHUB_WORKSPACE
+          git clone "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9.git" -b "android12L-release" gcc-64 --depth=1
+          git clone "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9.git" -b "android12L-release" gcc-32 --depth=1
+          git clone "https://github.com/prorooter007/android_prebuilts_clang_host_linux-x86_clang-6877366.git" -b "11.0" "clang-custom" --depth 1
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: build-kernel-pixelos-base
+          max-size: 2G
+
+      - name: Get PixelOS kernel base (5.4.302 + BPF 5.10)
+        run: |
+          cd $GITHUB_WORKSPACE
+          git clone -b sixteen-qpr2 --depth 1 \
+            "https://github.com/one899/android_kernel_oneplus_sm8350_pixelos.git" kernel/msm-5.4
+          echo "PixelOS base cloned:"
+          grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL) =' kernel/msm-5.4/Makefile
+          echo "BPF helpers: $(grep -c 'FN(' kernel/msm-5.4/include/uapi/linux/bpf.h)"
+
+      - name: Get OnePlus vendor modules
+        run: |
+          cd $GITHUB_WORKSPACE
+          git clone -b oneplus/sm8350_b_16.0.0_oneplus9rt --depth 1 \
+            "https://github.com/one899/android_kernel_modules_and_devicetree_oneplus_sm8350.git" modules
+          mv modules/vendor ./
+          rm -rf modules
+          echo "vendor modules placed: $(ls vendor/ | head -5)"
+
+      - name: Get OPLUS build configs + defconfig from vendor kernel
+        run: |
+          cd $GITHUB_WORKSPACE
+          git clone -b oneplus/sm8350_b_16.0.0_oneplus9rt --depth 1 \
+            "https://github.com/one899/android_kernel_oneplus_sm8350.git" vendor-kernel-extra
+          V=$GITHUB_WORKSPACE/kernel/msm-5.4
+          E=$GITHUB_WORKSPACE/vendor-kernel-extra
+          # 搬 OPLUS 构建文件
+          cp $E/OplusKernelEnvConfig.mk $V/ 2>/dev/null && echo "copied OplusKernelEnvConfig.mk" || echo "WARN: OplusKernelEnvConfig.mk not found"
+          cp $E/oplus_native_features.mk $V/ 2>/dev/null && echo "copied oplus_native_features.mk" || echo "WARN: oplus_native_features.mk not found"
+          # 搬 9rt_defconfig
+          cp $E/arch/arm64/configs/9rt_defconfig $V/arch/arm64/configs/ 2>/dev/null && echo "copied 9rt_defconfig" || echo "WARN: 9rt_defconfig not found"
+          # 查找所有 OPLUS 相关构建文件
+          echo "=== vendor kernel extra OPLUS build files ==="
+          ls $E/ | grep -i oplus
+          echo "=== 检查 PixelOS 基底是否已有这些文件 ==="
+          ls $V/ | grep -i oplus || echo "PixelOS base has no oplus build files (will add)"
+          rm -rf vendor-kernel-extra
+
+      - name: Get Packing Tools
+        run: |
+          cd $GITHUB_WORKSPACE/kernel/msm-5.4
+          git clone "https://github.com/osm0sis/AnyKernel3.git" -b "master" Anykernel3 --depth=1
+
+      - name: Build Kernel
+        run: |
+          cd $GITHUB_WORKSPACE/kernel/msm-5.4
+          export PATH=$GITHUB_WORKSPACE/clang-custom/bin:$PATH
+          make CC="ccache clang" O=out ARCH=arm64 CLANG_TRIPLE=aarch64-linux-gnu- BRAND_SHOW_FLAG=oneplus LLVM=1 LLVM_IAS=1 CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-64/bin/aarch64-linux-android- CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi- 9rt_defconfig
+          make -j$(nproc --all) CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- BRAND_SHOW_FLAG=oneplus LLVM=1 LLVM_IAS=1 STRIP=llvm-strip CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-64/bin/aarch64-linux-android- CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi- O=out ARCH=arm64 2>&1 | tee error.log || true
+          echo "=== 收集全部编译错误 ==="
+          grep -E "error:|Error [0-9]|fatal error|implicit declaration|No rule to make|undefined reference|multiple definition" error.log | sort -u | head -100 || echo "无错误"
+          echo "=== Image 是否存在 ==="
+          ls -la out/arch/arm64/boot/Image 2>/dev/null || echo "Image 未生成(编译失败)"
+          test -f out/arch/arm64/boot/Image || exit 1
+          cat out/arch/arm64/boot/dts/vendor/oplus/martini/*.dtb > out/arch/arm64/boot/dts/vendor/oplus/martini/dtb 2>/dev/null || echo "WARN: martini dtb concat failed"
+
+      - name: Make Anykernel3 - NoDTB
+        run: |
+          TIME=$(date +"%Y%m%d%H%M%S")
+          cd $GITHUB_WORKSPACE/kernel/msm-5.4
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' Anykernel3/anykernel.sh
+          sed -i 's!BLOCK=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!BLOCK=auto;!g' Anykernel3/anykernel.sh
+          sed -i 's/IS_SLOT_DEVICE=0;/is_slot_device=auto;/g' Anykernel3/anykernel.sh
+          mkdir -p tmp
+          cp -fp out/arch/arm64/boot/Image tmp
+          cp -rp ./Anykernel3/* tmp
+          cd tmp && 7za a -mx9 tmp.zip * > /dev/null && cd ..
+          cp -fp tmp/tmp.zip oneplus9rt-coloros16-pixelosbase-$TIME.zip
+          rm -rf tmp
+          echo "PACK_NAME=oneplus9rt-coloros16-pixelosbase-$TIME.zip" >> $GITHUB_ENV
+
+      - name: Make Anykernel3 - DTB
+        run: |
+          TIME=$(date +"%Y%m%d%H%M%S")
+          cd $GITHUB_WORKSPACE/kernel/msm-5.4
+          mkdir -p tmp
+          cp -fp out/arch/arm64/boot/Image tmp
+          if [ -f out/arch/arm64/boot/dts/vendor/oplus/martini/dtb ]; then
+            cp -fp out/arch/arm64/boot/dts/vendor/oplus/martini/dtb tmp
+            cp -fp out/arch/arm64/boot/dts/vendor/oplus/martini/dtbo.img tmp 2>/dev/null || true
+          fi
+          cp -rp ./Anykernel3/* tmp
+          cd tmp && 7za a -mx9 tmp.zip * > /dev/null && cd ..
+          cp -fp tmp/tmp.zip oneplus9rt-coloros16-pixelosbase-$TIME-DTB.zip
+          rm -rf tmp
+          echo "PACK_NAME_DTB=oneplus9rt-coloros16-pixelosbase-$TIME-DTB.zip" >> $GITHUB_ENV
+
+      - name: Upload Build Artifacts (AK3)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kernel-9RT-PixelOSBase-AK3
+          path: |
+            kernel/msm-5.4/${{ env.PACK_NAME }}
+            kernel/msm-5.4/${{ env.PACK_NAME_DTB }}
+          if-no-files-found: error
