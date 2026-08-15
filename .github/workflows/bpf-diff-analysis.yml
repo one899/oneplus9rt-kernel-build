@@ -1,0 +1,59 @@
+name: BPF Diff Analysis - vendor vs PixelOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone vendor kernel (shallow)
+        run: |
+          git clone --depth 1 -b oneplus/sm8350_b_16.0.0_oneplus9rt \
+            https://github.com/one899/android_kernel_oneplus_sm8350.git vendor
+      - name: Clone PixelOS reference (shallow)
+        run: |
+          git clone --depth 1 -b sixteen-qpr2 \
+            https://github.com/one899/android_kernel_oneplus_sm8350_pixelos.git pixelos
+      - name: Generate BPF diff report
+        run: |
+          mkdir -p report
+          echo "# BPF diff: vendor (oneplus/sm8350_b_16.0.0_oneplus9rt) vs PixelOS (sixteen-qpr2)" > report/bpf-diff.md
+          echo "" >> report/bpf-diff.md
+
+          echo "## 1. Missing files in vendor (present in PixelOS)" >> report/bpf-diff.md
+          diff -rq vendor/kernel/bpf pixelos/kernel/bpf 2>/dev/null | grep -E "Only in pixelos" >> report/bpf-diff.md || echo "none" >> report/bpf-diff.md
+
+          echo "" >> report/bpf-diff.md
+          echo "## 2. Files that differ" >> report/bpf-diff.md
+          diff -rq vendor/kernel/bpf pixelos/kernel/bpf 2>/dev/null | grep -E "differ" >> report/bpf-diff.md || echo "none" >> report/bpf-diff.md
+
+          echo "" >> report/bpf-diff.md
+          echo "## 3. Key UAPI map/prog types in each tree" >> report/bpf-diff.md
+          for f in include/uapi/linux/bpf.h include/linux/bpf.h include/linux/bpf_verifier.h; do
+            echo "### $f" >> report/bpf-diff.md
+            echo "- vendor BPF_MAP_TYPE count: $(grep -c 'BPF_MAP_TYPE_' vendor/$f 2>/dev/null || echo 0)" >> report/bpf-diff.md
+            echo "- pixelos BPF_MAP_TYPE count: $(grep -c 'BPF_MAP_TYPE_' pixelos/$f 2>/dev/null || echo 0)" >> report/bpf-diff.md
+            echo "- vendor BPF_PROG_TYPE count: $(grep -c 'BPF_PROG_TYPE_' vendor/$f 2>/dev/null || echo 0)" >> report/bpf-diff.md
+            echo "- pixelos BPF_PROG_TYPE count: $(grep -c 'BPF_PROG_TYPE_' pixelos/$f 2>/dev/null || echo 0)" >> report/bpf-diff.md
+            echo "" >> report/bpf-diff.md
+          done
+
+          echo "## 4. Key BPF helpers in each tree" >> report/bpf-diff.md
+          echo "- vendor helpers: $(grep -oP 'FN\(\K[a-z_0-9]+' vendor/include/uapi/linux/bpf.h 2>/dev/null | wc -l)" >> report/bpf-diff.md
+          echo "- pixelos helpers: $(grep -oP 'FN\(\K[a-z_0-9]+' pixelos/include/uapi/linux/bpf.h 2>/dev/null | wc -l)" >> report/bpf-diff.md
+
+          echo "" >> report/bpf-diff.md
+          echo "## 5. Key features present" >> report/bpf-diff.md
+          for feat in BPF_MAP_TYPE_RINGBUF BPF_MAP_TYPE_BLOOM_FILTER BPF_MAP_TYPE_STRUCT_OPS BPF_LINK_TYPE_ITER BPF_LINK_TYPE_TRACING BPF_PROG_TYPE_LSM BPF_PROG_TYPE_STRUCT_OPS BPF_MAP_BATCH BPF_TRAMP_F_INDIRECT; do
+            v=$(grep -c "$feat" vendor/include/uapi/linux/bpf.h 2>/dev/null || echo 0)
+            p=$(grep -c "$feat" pixelos/include/uapi/linux/bpf.h 2>/dev/null || echo 0)
+            echo "- $feat: vendor=$v pixelos=$p" >> report/bpf-diff.md
+          done
+
+          cat report/bpf-diff.md
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bpf-diff-report
+          path: report/
