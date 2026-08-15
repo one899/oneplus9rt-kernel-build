@@ -1,0 +1,23 @@
+name: Find bpf_get_prog_name definition
+
+on:
+  workflow_dispatch:
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone oppo
+        run: |
+          git clone --depth 1 -b oneplus/sm8350v_15.0.0_oneplus9pro \
+            https://github.com/JackA1ltman/android_kernel_oppo_sm8350.git /tmp/oppo
+      - name: Grep bpf_get_prog_name
+        run: |
+          echo "=== bpf_get_prog_name 所有出现(定义) ==="
+          grep -rn "bpf_get_prog_name" /tmp/oppo --include="*.c" --include="*.h" | grep -vE "extern|static inline" | head -10
+          echo ""
+          echo "=== bpf_get_prog_name 声明 ==="
+          grep -rn "bpf_get_prog_name" /tmp/oppo/include/ | head -5
+          echo ""
+          echo "=== 可能定义文件检查 ==="
+          grep -l "bpf_get_prog_name" /tmp/oppo/kernel/bpf/*.c /tmp/oppo/net/core/*.c /tmp/oppo/kernel/trace/*.c 2>/dev/null
