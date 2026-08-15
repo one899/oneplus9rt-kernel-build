@@ -16,7 +16,7 @@ jobs:
           git clone --depth 1 --filter=blob:none --sparse \
             -b v5.10 https://github.com/torvalds/linux.git upstream510
           cd upstream510
-          git sparse-checkout set kernel/bpf include/linux include/uapi/linux net/core/filter.c kernel/trace
+          git sparse-checkout set kernel/bpf include/linux include/uapi/linux net/core kernel/trace
           ls kernel/bpf/ | head -30
       - name: Compare PixelOS BPF vs upstream 5.10
         run: |
