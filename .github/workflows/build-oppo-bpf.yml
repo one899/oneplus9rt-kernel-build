@@ -81,6 +81,12 @@ jobs:
           cp $OPP/kernel/trace/trace_kprobe.c $OP/kernel/trace/trace_kprobe.c 2>/dev/null && echo "  copied: trace_kprobe.c"
           # trace_events.h 声明配套(6 参 -> 5 参)
           cp $OPP/include/linux/trace_events.h $OP/include/linux/trace_events.h 2>/dev/null && echo "  copied: trace_events.h"
+          # trace_kprobe.c/trace_uprobe.c 配套的 trace_probe 头文件
+          for h in kernel/trace/trace_probe.h kernel/trace/trace_probe.c \
+                   kernel/trace/trace_probe_tmpl.h kernel/trace/trace_uprobe.h \
+                   kernel/trace/trace_kprobe_selftest.c; do
+            cp "$OPP/$h" "$OP/$h" 2>/dev/null && echo "  copied: $h" || echo "  SKIP: $h"
+          done
 
           # SM8250-style header patches
           curl -L "https://raw.githubusercontent.com/one899/oneplus9rt-kernel-pixelos/main/scripts/patch_headers.sh" \
