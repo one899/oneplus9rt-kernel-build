@@ -77,8 +77,12 @@ jobs:
           sed -i 's/^CONFIG_OPLUS_HEALTHINFO=y$/# CONFIG_OPLUS_HEALTHINFO is not set/' $D
           sed -i 's/^CONFIG_FG_TASK_UID=y$/# CONFIG_FG_TASK_UID is not set/' $D
           sed -i 's/^CONFIG_OPLUS_FEATURE_HEALTHINFO=y$/# CONFIG_OPLUS_FEATURE_HEALTHINFO is not set/' $D
+          # UX IM flag 在 PixelOS 基底 sched.h 无 im_flag 字段,禁用
+          sed -i 's/^CONFIG_OPLUS_UX_IM_FLAG=y$/# CONFIG_OPLUS_UX_IM_FLAG is not set/' $D
           echo "=== defconfig 调整后 healthinfo 相关 ==="
           grep -n "HEALTHINFO\|FG_TASK_UID\|FG_UID" $D || echo "none (all disabled)"
+          echo "=== UX IM 相关 ==="
+          grep -n "UX_IM" $D || echo "none (disabled)"
 
       - name: Get Packing Tools
         run: |
