@@ -1,0 +1,83 @@
+name: Check OPLUS Customizations in BPF Files
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone vendor kernel (shallow)
+        run: |
+          git clone --depth 1 -b oneplus/sm8350_b_16.0.0_oneplus9rt \
+            https://github.com/one899/android_kernel_oneplus_sm8350.git vendor
+      - name: Clone PixelOS reference (shallow)
+        run: |
+          git clone --depth 1 -b sixteen-qpr2 \
+            https://github.com/one899/android_kernel_oneplus_sm8350_pixelos.git pixelos
+      - name: Analyze OPLUS customizations in BPF files
+        run: |
+          mkdir -p report
+          echo "# OPLUS customization check in BPF files" > report/oplus-check.md
+          echo "" >> report/oplus-check.md
+
+          FILES="
+          kernel/bpf/arraymap.c
+          kernel/bpf/btf.c
+          kernel/bpf/cgroup.c
+          kernel/bpf/core.c
+          kernel/bpf/cpumap.c
+          kernel/bpf/devmap.c
+          kernel/bpf/hashtab.c
+          kernel/bpf/helpers.c
+          kernel/bpf/inode.c
+          kernel/bpf/local_storage.c
+          kernel/bpf/lpm_trie.c
+          kernel/bpf/map_in_map.c
+          kernel/bpf/offload.c
+          kernel/bpf/percpu_freelist.c
+          kernel/bpf/queue_stack_maps.c
+          kernel/bpf/reuseport_array.c
+          kernel/bpf/stackmap.c
+          kernel/bpf/syscall.c
+          kernel/bpf/tnum.c
+          kernel/bpf/verifier.c
+          kernel/trace/bpf_trace.c
+          net/core/filter.c
+          include/linux/bpf.h
+          include/linux/filter.h
+          include/uapi/linux/bpf.h
+          "
+
+          echo "## OPLUS/OnePlus-specific markers in vendor BPF files" >> report/oplus-check.md
+          for f in $FILES; do
+            if [ -f "vendor/$f" ]; then
+              CNT=$(grep -ciE "oplus|oneplus|OPLUS|OnePlus" "vendor/$f" 2>/dev/null || echo 0)
+              if [ "$CNT" -gt 0 ]; then
+                echo "### $f : $CNT matches" >> report/oplus-check.md
+                grep -inE "oplus|oneplus" "vendor/$f" 2>/dev/null | head -5 | sed 's/^/    /' >> report/oplus-check.md
+              fi
+            fi
+          done
+
+          echo "" >> report/oplus-check.md
+          echo "## ANDROID: markers (AOSP-specific backports)" >> report/oplus-check.md
+          for f in $FILES; do
+            if [ -f "vendor/$f" ]; then
+              CNT=$(grep -cE "ANDROID:" "vendor/$f" 2>/dev/null || echo 0)
+              if [ "$CNT" -gt 0 ]; then
+                echo "- $f : $CNT" >> report/oplus-check.md
+              fi
+            fi
+          done
+
+          echo "" >> report/oplus-check.md
+          echo "## Vendor-only files in kernel/bpf (not in PixelOS)" >> report/oplus-check.md
+          diff -rq vendor/kernel/bpf pixelos/kernel/bpf 2>/dev/null | grep -E "Only in vendor" >> report/oplus-check.md || echo "none" >> report/oplus-check.md
+
+          cat report/oplus-check.md
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: oplus-check-report
+          path: report/
