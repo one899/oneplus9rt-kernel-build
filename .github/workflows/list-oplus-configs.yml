@@ -1,0 +1,23 @@
+name: List OPLUS configs in 9rt_defconfig
+
+on:
+  workflow_dispatch:
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone vendor kernel (shallow)
+        run: |
+          git clone --depth 1 -b oneplus/sm8350_b_16.0.0_oneplus9rt \
+            https://github.com/one899/android_kernel_oneplus_sm8350.git /tmp/vendor
+      - name: Extract OPLUS configs
+        run: |
+          echo "=== 9rt_defconfig 中所有 OPLUS 相关 config(=y) ==="
+          grep -E "^CONFIG_OPLUS.*=y" /tmp/vendor/arch/arm64/configs/9rt_defconfig | sort
+          echo ""
+          echo "=== 总数 ==="
+          grep -cE "^CONFIG_OPLUS.*=y" /tmp/vendor/arch/arm64/configs/9rt_defconfig
+          echo ""
+          echo "=== 9rt_defconfig 中 CONFIG_FG_/CONFIG_UX_ 相关 ==="
+          grep -E "^CONFIG_(FG|UX|IM|HEALTHINFO|JANK|HANS|SLUMBER|MEMLEAK|PHOENIX|OLC|KSWAPD|F2FS_OPLUS).*=y" /tmp/vendor/arch/arm64/configs/9rt_defconfig | sort
