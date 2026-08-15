@@ -93,15 +93,7 @@ jobs:
           git status --short | head -60
           echo "=== 变更统计 ==="
           git diff --cached --stat | tail -20
-          git commit -m "bpf: backport 5.10-level BPF from PixelOS reference (5.4.302)
-
-- Sync kernel/bpf/* to 5.10 level: ringbuf, trampoline, bpf_iter,
-  bpf_lsm, bpf_struct_ops, dispatcher, local_storage, net_namespace
-- Sync include/linux/bpf*, btf.h, filter.h, uapi bpf.h
-- Sync net/core/filter.c, kernel/trace/bpf_trace.c
-- Keep vendor-only xskmap.c
-
-Baseline: vendor 5.4.295 <- PixelOS 5.4.302 BPF (157 helpers, == upstream 5.10)"
+          git commit -m "bpf: backport 5.10-level BPF from PixelOS reference (5.4.302) - sync kernel/bpf ringbuf trampoline bpf_iter bpf_lsm bpf_struct_ops dispatcher local_storage net_namespace + include/linux/bpf* btf.h filter.h uapi + net/core/filter.c kernel/trace/bpf_trace.c; keep vendor-only xskmap.c; baseline 5.4.295 <- PixelOS 5.4.302 BPF (157 helpers == upstream 5.10)"
           git push origin bpf-5.10-backport
           echo "PUSHED branch: bpf-5.10-backport"
       - name: Show final branch info
