@@ -1,0 +1,32 @@
+name: Find fg_uid in vendor tree
+
+on:
+  workflow_dispatch:
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone vendor kernel (shallow)
+        run: |
+          git clone --depth 1 -b oneplus/sm8350_b_16.0.0_oneplus9rt \
+            https://github.com/one899/android_kernel_oneplus_sm8350.git /tmp/vendor
+      - name: Grep fg_uid locations
+        run: |
+          echo "=== fg_uid.h 位置 ==="
+          find /tmp/vendor -name "fg_uid*" 2>/dev/null | head -10
+          echo ""
+          echo "=== fg_uid 引用 ==="
+          grep -rn "fg_uid" /tmp/vendor/include/linux/healthinfo/ 2>/dev/null | head -5
+          echo ""
+          echo "=== 厂商 healthinfo fg.h 是否引用同路径 ==="
+          cat /tmp/vendor/include/linux/healthinfo/fg.h 2>/dev/null | head -8
+          echo ""
+          echo "=== 9rt_defconfig 中 healthinfo 配置 ==="
+          grep -n "HEALTHINFO\|FG_TASK_UID\|FG_UID" /tmp/vendor/arch/arm64/configs/9rt_defconfig 2>/dev/null | head -10
+          echo ""
+          echo "=== drivers/soc/oplus/healthinfo 的 Kconfig ==="
+          cat /tmp/vendor/drivers/soc/oplus/healthinfo/Kconfig 2>/dev/null | head -20
+          echo ""
+          echo "=== PixelOS 基底是否有 healthinfo 的 Kconfig 依赖 ==="
+          echo "(will check pixelos separately)"
