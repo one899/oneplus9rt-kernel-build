@@ -75,7 +75,8 @@ jobs:
                    include/linux/capability.h include/uapi/linux/capability.h \
                    include/linux/perf_event.h include/linux/ftrace.h include/linux/trace_events.h \
                    include/linux/security.h include/linux/lsm_hooks.h \
-                   include/linux/static_call.h include/linux/bpf-cgroup.h include/linux/cgroup-defs.h; do
+                   include/linux/static_call.h include/linux/bpf-cgroup.h include/linux/cgroup-defs.h \
+                   security/selinux/include/classmap.h security/selinux/include/initial_sid_to_string.h; do
             if [ -f "$P/$f" ]; then
               mkdir -p "$V/$(dirname $f)"
               cp "$P/$f" "$V/$f"
@@ -110,7 +111,13 @@ jobs:
           cd $GITHUB_WORKSPACE/kernel/msm-5.4
           export PATH=$GITHUB_WORKSPACE/clang-custom/bin:$PATH
           make CC="ccache clang" O=out ARCH=arm64 CLANG_TRIPLE=aarch64-linux-gnu- BRAND_SHOW_FLAG=oneplus LLVM=1 LLVM_IAS=1 CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-64/bin/aarch64-linux-android- CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi- 9rt_defconfig
-          make -j$(nproc --all) CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- BRAND_SHOW_FLAG=oneplus LLVM=1 LLVM_IAS=1 STRIP=llvm-strip CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-64/bin/aarch64-linux-android- CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi- O=out ARCH=arm64 2>&1 | tee error.log
+          make -j$(nproc --all) CC="ccache clang" CLANG_TRIPLE=aarch64-linux-gnu- BRAND_SHOW_FLAG=oneplus LLVM=1 LLVM_IAS=1 STRIP=llvm-strip CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-64/bin/aarch64-linux-android- CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/arm-linux-androideabi- O=out ARCH=arm64 2>&1 | tee error.log || true
+          echo "=== 收集全部编译错误 ==="
+          grep -E "error:|Error [0-9]|fatal error|implicit declaration|No rule to make|undefined reference|multiple definition" error.log | sort -u | head -100 || echo "无错误"
+          echo "=== Image 是否存在 ==="
+          ls -la out/arch/arm64/boot/Image 2>/dev/null || echo "Image 未生成(编译失败)"
+          echo "=== 继续打包流程(若失败会在这里失败) ==="
+          test -f out/arch/arm64/boot/Image || exit 1
           cat $GITHUB_WORKSPACE/kernel/msm-5.4/out/arch/arm64/boot/dts/vendor/oplus/martini/*.dtb > $GITHUB_WORKSPACE/kernel/msm-5.4/out/arch/arm64/boot/dts/vendor/oplus/martini/dtb
 
       - name: Make Anykernel3 - NoDTB
