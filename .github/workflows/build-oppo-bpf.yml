@@ -52,10 +52,44 @@ jobs:
           OP=kernel/msm-5.4
           OPP=oppo_src
 
+          # 备份厂商 core.c 的 bpf_get_prog_name(OPPO core.c 没有该函数,但厂商 perf 子系统调用它)
+          python3 - <<'PYEOF'
+          import re
+          with open('kernel/msm-5.4/kernel/bpf/core.c') as f:
+              content = f.read()
+          m = re.search(r'void bpf_get_prog_name\(const struct bpf_prog \*prog, char \*sym\)\n\{.*?\n\}\n', content, re.DOTALL)
+          if m:
+              with open('/tmp/bpf_get_prog_name.c', 'w') as f:
+                  f.write(m.group(0))
+              print('bpf_get_prog_name extracted (%d chars)' % len(m.group(0)))
+          else:
+              print('WARN: bpf_get_prog_name not found in vendor core.c')
+          PYEOF
+
           # Replace kernel/bpf/
           rm -rf $OP/kernel/bpf
           cp -r $OPP/kernel/bpf $OP/kernel/bpf
-          echo "[OK] kernel/bpf replaced"
+          # 注入厂商的 bpf_get_prog_name(perf 子系统依赖)
+          if [ -f /tmp/bpf_get_prog_name.c ]; then
+            python3 - <<'PYEOF'
+            with open('kernel/msm-5.4/kernel/bpf/core.c') as f:
+                content = f.read()
+            with open('/tmp/bpf_get_prog_name.c') as f:
+                fn = f.read()
+            if 'bpf_get_prog_name' not in content:
+                idx = content.rfind('#endif')
+                if idx == -1:
+                    content = content + '\n' + fn
+                else:
+                    content = content[:idx] + fn + '\n' + content[idx:]
+                with open('kernel/msm-5.4/kernel/bpf/core.c', 'w') as f:
+                    f.write(content)
+                print('bpf_get_prog_name injected')
+            else:
+                print('bpf_get_prog_name already present')
+            PYEOF
+          fi
+          echo "[OK] kernel/bpf replaced (+bpf_get_prog_name)"
 
           # Replace BPF-specific headers
           for h in include/linux/bpf.h include/uapi/linux/bpf.h include/linux/btf.h \
@@ -85,6 +119,10 @@ jobs:
             cp "$OPP/net/core/$f" "$OP/net/core/$f" 2>/dev/null && echo "  copied: net/core/$f" || echo "  SKIP: net/core/$f"
           done
           cp $OPP/include/linux/skmsg.h $OP/include/linux/skmsg.h 2>/dev/null && echo "  copied: skmsg.h"
+          # 链接符号配套:test_run.c (bpf_prog_test_run_raw_tp/tracing) + nsfs.c (ns_match)
+          cp $OPP/net/bpf/test_run.c $OP/net/bpf/test_run.c 2>/dev/null && echo "  copied: net/bpf/test_run.c"
+          cp $OPP/net/bpf/Makefile $OP/net/bpf/Makefile 2>/dev/null && echo "  copied: net/bpf/Makefile"
+          cp $OPP/fs/nsfs.c $OP/fs/nsfs.c 2>/dev/null && echo "  copied: fs/nsfs.c"
           # bpf_trace.c 配套的 uprobe/kprobe 信息获取(签名差异:5 参 vs 厂商 6 参)
           cp $OPP/kernel/trace/trace_uprobe.c $OP/kernel/trace/trace_uprobe.c 2>/dev/null && echo "  copied: trace_uprobe.c"
           cp $OPP/kernel/trace/trace_kprobe.c $OP/kernel/trace/trace_kprobe.c 2>/dev/null && echo "  copied: trace_kprobe.c"
@@ -107,6 +145,18 @@ jobs:
           echo "=== 合并后验证 ==="
           grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL) =' $OP/Makefile
           echo "vendor BPF helpers: $(grep -c 'FN(' $OP/include/uapi/linux/bpf.h)"
+
+      - name: Enable BPF 5.10 features in defconfig (NO BTF - 5.4 BTF incomplete)
+        run: |
+          cd $GITHUB_WORKSPACE/kernel/msm-5.4
+          D=arch/arm64/configs/9rt_defconfig
+          # 激活 5.10 级 BPF 特性(注意:不开 DEBUG_INFO_BTF,5.4 的 BTF 不完整)
+          for opt in CONFIG_BPF_TRACING CONFIG_BPF_LSM CONFIG_BPF_STREAM_PARSER CONFIG_BPF_PRELOAD CONFIG_BPF_KPROBE_OVERRIDE; do
+            grep -q "^$opt=" $D || echo "$opt=y" >> $D
+            echo "checked: $opt"
+          done
+          echo "=== 最终 BPF 配置 ==="
+          grep -E "CONFIG_BPF|CONFIG_DEBUG_INFO_BTF" $D | sort
 
       - name: Get Packing Tools
         run: |
