@@ -86,6 +86,7 @@ jobs:
                    include/linux/bpf-netns.h include/linux/bpf-cgroup.h include/linux/bpf_perf_event.h \
                    include/trace/events/cgroup.h \
                    include/linux/lsm_hook_defs.h include/linux/vmalloc.h include/linux/slab.h \
+                   include/linux/rcupdate_trace.h include/linux/rcupdate.h include/linux/rcu_sync.h \
                    security/selinux/include/classmap.h security/selinux/include/initial_sid_to_string.h; do
             if [ -f "$P/$f" ]; then
               mkdir -p "$V/$(dirname $f)"
