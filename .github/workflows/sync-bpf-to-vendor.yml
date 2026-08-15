@@ -1,0 +1,115 @@
+name: Sync BPF 5.10 Files to Vendor Tree
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout vendor kernel (full)
+        uses: actions/checkout@v4
+        with:
+          repository: one899/android_kernel_oneplus_sm8350
+          ref: oneplus/sm8350_b_16.0.0_oneplus9rt
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clone PixelOS reference (shallow)
+        run: |
+          git clone --depth 1 -b sixteen-qpr2 \
+            https://github.com/one899/android_kernel_oneplus_sm8350_pixelos.git /tmp/pixelos
+
+      - name: Sync BPF files (铁律范围 - 只动 BPF 核心)
+        run: |
+          set -e
+          P=/tmp/pixelos
+          V=$GITHUB_WORKSPACE
+
+          # 同步的目录/文件(整体对齐 PixelOS 5.10 级 BPF)
+          SYNC_LIST="
+          kernel/bpf
+          kernel/trace/bpf_trace.c
+          net/core/filter.c
+          include/linux/bpf.h
+          include/linux/bpf_verifier.h
+          include/linux/bpf_types.h
+          include/linux/bpf_local_storage.h
+          include/linux/bpf_lsm.h
+          include/linux/bpf_ringbuf.h
+          include/linux/bpf_trace.h
+          include/linux/btf.h
+          include/linux/filter.h
+          include/uapi/linux/bpf.h
+          include/uapi/linux/btf.h
+          "
+
+          # kernel/bpf 目录整体替换,但保留厂商独有文件
+          # 备份厂商独有文件(PixelOS 没有的)
+          mkdir -p /tmp/vendor-only
+          for f in $(diff -rq $V/kernel/bpf $P/kernel/bpf 2>/dev/null | grep "Only in $V" | awk '{print $4}'); do
+            echo "backup vendor-only: $f"
+            cp "$V/kernel/bpf/$f" /tmp/vendor-only/ 2>/dev/null || true
+          done
+
+          echo "=== 替换 kernel/bpf ==="
+          rm -rf $V/kernel/bpf
+          cp -r $P/kernel/bpf $V/kernel/bpf
+
+          # 恢复厂商独有文件
+          for f in /tmp/vendor-only/*; do
+            [ -f "$f" ] && cp "$f" "$V/kernel/bpf/" && echo "restored: $(basename $f)"
+          done
+
+          # 单文件同步
+          for f in kernel/trace/bpf_trace.c net/core/filter.c \
+                   include/linux/bpf.h include/linux/bpf_verifier.h include/linux/bpf_types.h \
+                   include/linux/bpf_local_storage.h include/linux/bpf_lsm.h include/linux/bpf_ringbuf.h \
+                   include/linux/bpf_trace.h include/linux/btf.h include/linux/filter.h \
+                   include/uapi/linux/bpf.h include/uapi/linux/btf.h; do
+            if [ -f "$P/$f" ]; then
+              mkdir -p "$V/$(dirname $f)"
+              cp "$P/$f" "$V/$f"
+              echo "synced: $f"
+            else
+              echo "SKIP (not in pixelos): $f"
+            fi
+          done
+
+          # 检查厂商是否还有缺失的 bpf 相关 include
+          echo "=== 检查 include/linux/bpf* 覆盖 ==="
+          ls $V/include/linux/bpf*.h | xargs -n1 basename
+
+      - name: Commit and push to bpf-5.10 branch
+        run: |
+          cd $GITHUB_WORKSPACE
+          git config user.name "one899"
+          git config user.email "one899@users.noreply.github.com"
+          git checkout -b bpf-5.10-backport
+          git add -A
+          git status --short | head -60
+          echo "=== 变更统计 ==="
+          git diff --cached --stat | tail -20
+          git commit -m "bpf: backport 5.10-level BPF from PixelOS reference (5.4.302)
+
+- Sync kernel/bpf/* to 5.10 level: ringbuf, trampoline, bpf_iter,
+  bpf_lsm, bpf_struct_ops, dispatcher, local_storage, net_namespace
+- Sync include/linux/bpf*, btf.h, filter.h, uapi bpf.h
+- Sync net/core/filter.c, kernel/trace/bpf_trace.c
+- Keep vendor-only xskmap.c
+
+Baseline: vendor 5.4.295 <- PixelOS 5.4.302 BPF (157 helpers, == upstream 5.10)"
+          git push origin bpf-5.10-backport
+          echo "PUSHED branch: bpf-5.10-backport"
+      - name: Show final branch info
+        run: |
+          cd $GITHUB_WORKSPACE
+          echo "=== Branch ==="
+          git branch -a | head
+          echo "=== Kernel version ==="
+          grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) =' Makefile
+          echo "=== BPF helper count ==="
+          grep -c 'FN(' include/uapi/linux/bpf.h || true
