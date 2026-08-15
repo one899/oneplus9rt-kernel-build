@@ -69,6 +69,17 @@ jobs:
           ls $V/ | grep -i oplus || echo "PixelOS base has no oplus build files (will add)"
           rm -rf vendor-kernel-extra
 
+      - name: Adjust defconfig for PixelOS base (disable OPLUS features missing in base)
+        run: |
+          cd $GITHUB_WORKSPACE/kernel/msm-5.4
+          D=arch/arm64/configs/9rt_defconfig
+          # healthinfo 驱动在 PixelOS 基底缺 fg_uid 依赖,禁用
+          sed -i 's/^CONFIG_OPLUS_HEALTHINFO=y$/# CONFIG_OPLUS_HEALTHINFO is not set/' $D
+          sed -i 's/^CONFIG_FG_TASK_UID=y$/# CONFIG_FG_TASK_UID is not set/' $D
+          sed -i 's/^CONFIG_OPLUS_FEATURE_HEALTHINFO=y$/# CONFIG_OPLUS_FEATURE_HEALTHINFO is not set/' $D
+          echo "=== defconfig 调整后 healthinfo 相关 ==="
+          grep -n "HEALTHINFO\|FG_TASK_UID\|FG_UID" $D || echo "none (all disabled)"
+
       - name: Get Packing Tools
         run: |
           cd $GITHUB_WORKSPACE/kernel/msm-5.4
