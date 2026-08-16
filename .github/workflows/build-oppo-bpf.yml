@@ -129,7 +129,7 @@ jobs:
           cd $GITHUB_WORKSPACE/kernel/msm-5.4
           D=arch/arm64/configs/9rt_defconfig
           # 激活 5.10 级 BPF 特性(注意:不开 DEBUG_INFO_BTF,5.4 的 BTF 不完整)
-          for opt in CONFIG_BPF_TRACING CONFIG_BPF_LSM CONFIG_BPF_STREAM_PARSER CONFIG_BPF_PRELOAD CONFIG_BPF_KPROBE_OVERRIDE; do
+          for opt in CONFIG_BPF_TRACING; do
             grep -q "^$opt=" $D || echo "$opt=y" >> $D
             echo "checked: $opt"
           done
